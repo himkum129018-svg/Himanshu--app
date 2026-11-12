@@ -25,6 +25,7 @@ class HimanshuService : Service() {
     companion object {
         var onHeard: ((String) -> Unit)? = null
         const val ARM = "arm"
+        const val CMD = "cmd"
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -100,25 +101,35 @@ class HimanshuService : Service() {
         if (cmd.contains("सो जाओ") || cmd.contains("धन्यवाद") || cmd.contains("शुक्रिया")) {
             armedUntil = 0; say("ठीक है, जब ज़रूरत हो हिमांशु बोलिए"); return
         }
-        if (cmd.contains("मतलब")) { learn(cmd, prefs); armedUntil = now + 60000; return }
+        runCommand(cmd, prefs)
+    }
+
+    private var lastFail = 0L
+    private fun runCommand(c0: String, prefs: android.content.SharedPreferences) {
+        var cmd = c0
         for (line in prefs.getStringSet("alias", emptySet())!!) {
             val k = line.substringBefore("=")
             if (k.isNotBlank() && cmd.contains(k)) cmd = cmd.replace(k, line.substringAfter("="))
         }
         val handled = brain.handle(cmd)
         armedUntil = System.currentTimeMillis() + (if (brain.isPlaying()) 15000 else 60000)
-        if (!handled) say("मुझे समझ नहीं आया, फिर से बोलिए। नया शब्द सिखाने के लिए बोलिए: लाइट का मतलब टॉर्च")
-    }
-
-    private fun learn(cmd: String, prefs: android.content.SharedPreferences) {
-        val junk = setOf("सीखो", "सिखाओ", "सीख", "का", "की", "के", "यानी", "है", "होता", "मतलब")
-        val left = cmd.substringBefore("मतलब").split(" ").filter { it.isNotBlank() && it !in junk }.joinToString(" ")
-        val right = cmd.substringAfter("मतलब").split(" ").filter { it.isNotBlank() && it !in junk }.joinToString(" ")
-        if (left.isBlank() || right.isBlank()) { say("ऐसे बोलिए: लाइट का मतलब टॉर्च"); return }
-        val set = (prefs.getStringSet("alias", emptySet()) ?: emptySet()).filter { !it.startsWith("$left=") }.toMutableSet()
-        set.add("$left=$right")
-        prefs.edit().putStringSet("alias", set).apply()
-        say("सीख लिया। अब $left बोलने पर मैं $right समझूँगा")
+        val n = System.currentTimeMillis()
+        if (handled) return
+        val key = prefs.getString("apikey", "") ?: ""
+        if (key.isBlank()) {
+            if (n - lastFail > 10000) { lastFail = n; say("समझ नहीं आया") }
+            return
+        }
+        Thread {
+            val out = try { Ai.ask(key, c0) } catch (e: Exception) { null }
+            handler.post {
+                if (out == null) { say("इंटरनेट या कुंजी में दिक्कत है"); return@post }
+                val reply = out.optString("reply")
+                val cmd2 = Ai.toCommand(out)
+                if (cmd2.isNotBlank()) { if (!brain.handle(Hindi.norm(cmd2)) && reply.isNotBlank()) say(reply) }
+                else say(if (reply.isNotBlank()) reply else "समझ नहीं आया")
+            }
+        }.start()
     }
 
     fun say(text: String) {
@@ -134,10 +145,14 @@ class HimanshuService : Service() {
     private fun done() {
         handler.postDelayed({
             if (--pending <= 0) { pending = 0; speech?.setPause(false) }
-        }, 500)
+        }, 250)
     }
 
     override fun onStartCommand(i: Intent?, f: Int, id: Int): Int {
+        if (i?.action == CMD) {
+            val txt = i?.getStringExtra("text") ?: ""
+            if (txt.isNotBlank()) runCommand(Hindi.norm(txt), getSharedPreferences("him", MODE_PRIVATE))
+        }
         if (i?.action == ARM) { armedUntil = System.currentTimeMillis() + 8000; say("हाँ बोलो") }
         return START_STICKY
     }

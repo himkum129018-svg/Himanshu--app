@@ -10,7 +10,9 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
+import android.text.InputType
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
@@ -51,12 +53,35 @@ class MainActivity : Activity() {
             isChecked = prefs.getBoolean("needName", true)
             setOnCheckedChangeListener { _, on -> prefs.edit().putBoolean("needName", on).apply() }
         })
+        val box = EditText(this).apply {
+            hint = "यहाँ टाइप करके आदेश दीजिए"; setTextColor(Color.WHITE); setHintTextColor(Color.GRAY); isSingleLine = true
+        }
+        fun send() {
+            val q = box.text.toString().trim()
+            if (q.isNotEmpty()) {
+                startForegroundService(Intent(this, HimanshuService::class.java).setAction(HimanshuService.CMD).putExtra("text", q))
+                box.setText("")
+            }
+        }
+        box.setOnEditorActionListener { _, _, _ -> send(); true }
+        root.addView(box)
+        root.addView(button("🔎 भेजो") { send() })
+        val keyBox = EditText(this).apply {
+            hint = "AI कुंजी (API key) यहाँ चिपकाइए"; setTextColor(Color.WHITE); setHintTextColor(Color.GRAY)
+            isSingleLine = true; inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        root.addView(keyBox)
+        root.addView(button("🔑 कुंजी सेव करो") {
+            prefs.edit().putString("apikey", keyBox.text.toString().trim()).apply()
+            keyBox.setText("")
+            Toast.makeText(this, "कुंजी सेव हो गई", Toast.LENGTH_SHORT).show()
+        })
         status = text("", 16f, Color.parseColor("#9FE870"))
         root.addView(status)
         root.addView(text(
             "\nबोलकर देखिए:\n• हिमांशु, यूट्यूब खोलो\n• हिमांशु, डाउनलोड वाला गाना बजाओ\n• हिमांशु, अगला गाना\n" +
                 "• हिमांशु, राहुल को फोन लगाओ\n• हिमांशु, फोन लगाओ जिसके आखिर में 21 हो\n• हिमांशु, टॉर्च जलाओ\n" +
-                "• हिमांशु, कैमरा खोलो\n• हिमांशु, आवाज़ बढ़ाओ\n• हिमांशु, पाँच मिनट का टाइमर लगाओ\n• हिमांशु, समय क्या हुआ\n\nएक बार 'हिमांशु' बोलिए, फिर 1 मिनट तक नाम बिना बोलते रहिए।\nसिखाना: 'लाइट का मतलब टॉर्च'\nसुलाना: 'सो जाओ'", 15f, Color.LTGRAY))
+                "• हिमांशु, कैमरा खोलो\n• हिमांशु, आवाज़ बढ़ाओ\n• हिमांशु, पाँच मिनट का टाइमर लगाओ\n• हिमांशु, समय क्या हुआ\n\nएक बार 'हिमांशु' बोलिए, फिर 1 मिनट तक नाम बिना बोलते रहिए।\nकिसी भी तरह बोलिए, AI समझ लेगा (इंटरनेट + कुंजी चाहिए)\nसुलाना: 'सो जाओ'", 15f, Color.LTGRAY))
         setContentView(ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F1720")); addView(root) })
     }
 
