@@ -5,12 +5,20 @@ plugins {
 android {
     namespace = "com.himanshu.assistant"
     compileSdk = 34
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
     defaultConfig {
         applicationId = "com.himanshu.assistant"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "2.0"
+        versionCode = 5
+        versionName = "5.0"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
     compileOptions {

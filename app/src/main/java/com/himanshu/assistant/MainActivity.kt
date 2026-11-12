@@ -40,7 +40,7 @@ class MainActivity : Activity() {
         fun text(s: String, size: Float, color: Int = Color.WHITE) = TextView(this).apply { text = s; textSize = size; setTextColor(color) }
         fun button(s: String, f: () -> Unit) = Button(this).apply { text = s; textSize = 17f; setOnClickListener { f() } }
 
-        root.addView(text("हिमांशु", 34f))
+        root.addView(text("Himanshu", 36f, Color.parseColor("#D4AF37")))
         root.addView(text("मेरा अपना हिंदी असिस्टेंट", 15f, Color.LTGRAY))
         root.addView(button("1) अनुमतियाँ दो") { requestPermissions(perms(), 1) })
         root.addView(button("▶ सुनना शुरू करो") { start() })
@@ -67,7 +67,7 @@ class MainActivity : Activity() {
         root.addView(box)
         root.addView(button("🔎 भेजो") { send() })
         val keyBox = EditText(this).apply {
-            hint = "AI कुंजी (API key) यहाँ चिपकाइए"; setTextColor(Color.WHITE); setHintTextColor(Color.GRAY)
+            hint = "Gemini कुंजी (API key) यहाँ चिपकाइए"; setTextColor(Color.WHITE); setHintTextColor(Color.GRAY)
             isSingleLine = true; inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
         root.addView(keyBox)
@@ -81,7 +81,7 @@ class MainActivity : Activity() {
         root.addView(text(
             "\nबोलकर देखिए:\n• हिमांशु, यूट्यूब खोलो\n• हिमांशु, डाउनलोड वाला गाना बजाओ\n• हिमांशु, अगला गाना\n" +
                 "• हिमांशु, राहुल को फोन लगाओ\n• हिमांशु, फोन लगाओ जिसके आखिर में 21 हो\n• हिमांशु, टॉर्च जलाओ\n" +
-                "• हिमांशु, कैमरा खोलो\n• हिमांशु, आवाज़ बढ़ाओ\n• हिमांशु, पाँच मिनट का टाइमर लगाओ\n• हिमांशु, समय क्या हुआ\n\nएक बार 'हिमांशु' बोलिए, फिर 1 मिनट तक नाम बिना बोलते रहिए।\nकिसी भी तरह बोलिए, AI समझ लेगा (इंटरनेट + कुंजी चाहिए)\nसुलाना: 'सो जाओ'", 15f, Color.LTGRAY))
+                "• हिमांशु, कैमरा खोलो\n• हिमांशु, आवाज़ बढ़ाओ\n• हिमांशु, पाँच मिनट का टाइमर लगाओ\n• हिमांशु, समय क्या हुआ\n\nएक बार 'हिमांशु' बोलिए, फिर 1 मिनट तक नाम बिना बोलते रहिए।\nकिसी भी तरह बोलिए, AI समझ लेगा (इंटरनेट + मुफ़्त Gemini कुंजी चाहिए)\nसुलाना: 'सो जाओ'", 15f, Color.LTGRAY))
         setContentView(ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F1720")); addView(root) })
     }
 

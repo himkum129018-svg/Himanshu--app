@@ -51,7 +51,7 @@ class HimanshuService : Service() {
 
         brain = Brain(this) { say(it) }
         tts = TextToSpeech(this) { s ->
-            if (s == TextToSpeech.SUCCESS) { tts?.language = Locale("hi", "IN"); ttsReady = true }
+            if (s == TextToSpeech.SUCCESS) { tts?.language = Locale("hi", "IN"); tts?.setSpeechRate(1.12f); ttsReady = true }
         }
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(id: String?) {}

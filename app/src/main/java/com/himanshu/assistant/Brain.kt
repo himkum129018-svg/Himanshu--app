@@ -77,8 +77,8 @@ class Brain(private val c: Context, private val say: (String) -> Unit) {
     }
 
     // ---------- फोन ----------
-    private fun isCall(t: String) = has(t, "फोन", "कॉल", "काल", "call", "डायल", "dial") &&
-        has(t, "लगा", "करो", "कर दो", "मिला", "बात", "डायल", "dial", "कीजि", "करना", "करनी")
+    private fun isCall(t: String) = has(t, "कॉल", "काल", "call", "डायल", "dial") ||
+        (has(t, "फोन") && has(t, "लगा", "करो", "कर दो", "मिला", "बात", "कीजि", "करना", "करनी"))
 
     private fun call(t: String, tokens: List<String>): Boolean {
         val m = tokens.indexOfFirst { tk -> LAST.any { tk.startsWith(it) } }
@@ -122,9 +122,19 @@ class Brain(private val c: Context, private val say: (String) -> Unit) {
         return out
     }
 
+    private val KIN = listOf(
+        listOf("मम्मी", "मॉम", "मां", "मम्मा", "मा", "mom", "mummy", "mother", "maa", "mama", "माता", "mum"),
+        listOf("पापा", "पप्पा", "डैड", "dad", "papa", "पिता", "father", "पिताजी", "daddy"))
+
     private fun byName(q: String) {
         val list = contacts()
-        val hit = Hindi.best(q, list) { it.first } ?: run { say("$q नाम का नंबर नहीं मिला"); return }
+        val qs = Hindi.skel(q)
+        val grp = KIN.firstOrNull { g -> g.any { Hindi.skel(it) == qs } }
+        val kin = if (grp != null) {
+            val ns = grp.map { Hindi.norm(it) }.toSet()
+            list.firstOrNull { cn -> Hindi.norm(cn.first).split(" ").any { it in ns } }
+        } else null
+        val hit = kin ?: Hindi.best(q, list) { it.first } ?: run { say("$q नाम का नंबर नहीं मिला"); return }
         dial(hit.second, hit.first, true)
     }
 
