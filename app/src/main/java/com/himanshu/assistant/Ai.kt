@@ -12,11 +12,12 @@ object Ai {
 action इनमें से एक: torch_on, torch_off, play_music (arg = गाने का नाम, या खाली), stop_music, next_song, youtube_search (arg), google_search (arg), open_app (arg = ऐप का नाम), call_name (arg = नाम), call_digits (arg = नंबर के आख़िरी अंक), volume_up, volume_down, volume_max, time, date, battery, camera, timer (arg = मिनट की संख्या), none.
 reply = बोलने के लिए बहुत छोटा हिंदी वाक्य। साधारण सवाल या बातचीत हो तो action none रखो और जवाब reply में दो।"""
 
-    private val MODELS = listOf("gemini-flash-lite-latest", "gemini-flash-latest")
+    @Volatile var lastError = ""
+    private val MODELS = listOf("gemini-flash-latest", "gemini-flash-lite-latest")
 
     fun ask(key: String, text: String): JSONObject? {
         for (m in MODELS) {
-            val r = try { call(key, m, text) } catch (e: Exception) { null }
+            val r = try { call(key, m, text) } catch (e: Exception) { lastError = m + ": " + (e.message ?: "error"); null }
             if (r != null) return r
         }
         return null
@@ -37,7 +38,10 @@ reply = बोलने के लिए बहुत छोटा हिंद�
         con.setRequestProperty("x-goog-api-key", key)
         con.setRequestProperty("content-type", "application/json")
         con.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
-        if (con.responseCode != 200) return null
+        if (con.responseCode != 200) {
+            lastError = model + ": HTTP " + con.responseCode + " " + (con.errorStream?.bufferedReader()?.readText()?.take(140) ?: "")
+            return null
+        }
         val resp = con.inputStream.bufferedReader().readText()
         val t = JSONObject(resp).getJSONArray("candidates").getJSONObject(0)
             .getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text")

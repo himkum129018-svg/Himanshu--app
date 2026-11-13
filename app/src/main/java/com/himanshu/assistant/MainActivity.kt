@@ -2,15 +2,18 @@ package com.himanshu.assistant
 
 import android.Manifest
 import android.app.Activity
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.view.View
 import android.text.InputType
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -21,7 +24,13 @@ import android.widget.Toast
 
 class MainActivity : Activity() {
     private lateinit var status: TextView
+    private lateinit var keyState: TextView
+    private lateinit var prefs: SharedPreferences
     private val lines = ArrayDeque<String>()
+    private val gold = Color.parseColor("#D4AF37")
+
+    private fun dp(n: Int) = (n * resources.displayMetrics.density).toInt()
+    private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_LONG).show()
 
     private fun perms(): Array<String> {
         val l = mutableListOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.READ_CONTACTS,
@@ -31,31 +40,52 @@ class MainActivity : Activity() {
         return l.toTypedArray()
     }
 
+    private fun tv(s: String, size: Float, color: Int = Color.WHITE) =
+        TextView(this).apply { text = s; textSize = size; setTextColor(color) }
+
+    private fun btn(s: String, f: () -> Unit) = Button(this).apply {
+        text = s; textSize = 16f; isAllCaps = false; setTextColor(Color.WHITE)
+        setBackgroundColor(Color.parseColor("#1F2937")); setOnClickListener { f() }
+    }
+
+    private fun input(h: String, secret: Boolean = false) = EditText(this).apply {
+        hint = h; setTextColor(Color.WHITE); setHintTextColor(Color.GRAY); isSingleLine = true
+        if (secret) inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val prefs = getSharedPreferences("him", MODE_PRIVATE)
-        val pad = (16 * resources.displayMetrics.density).toInt()
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(pad, pad * 2, pad, pad) }
+        prefs = getSharedPreferences("him", MODE_PRIVATE)
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(40), dp(16), dp(24)) }
+        fun add(v: View) {
+            root.addView(v, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                .apply { topMargin = dp(10) })
+        }
 
-        fun text(s: String, size: Float, color: Int = Color.WHITE) = TextView(this).apply { text = s; textSize = size; setTextColor(color) }
-        fun button(s: String, f: () -> Unit) = Button(this).apply { text = s; textSize = 17f; setOnClickListener { f() } }
+        add(tv("Himanshu", 36f, gold))
+        add(tv("मेरा अपना हिंदी असिस्टेंट", 15f, Color.LTGRAY))
 
-        root.addView(text("Himanshu", 36f, Color.parseColor("#D4AF37")))
-        root.addView(text("मेरा अपना हिंदी असिस्टेंट", 15f, Color.LTGRAY))
-        root.addView(button("1) अनुमतियाँ दो") { requestPermissions(perms(), 1) })
-        root.addView(button("▶ सुनना शुरू करो") { start() })
-        root.addView(button("⏹ बंद करो") { stopService(Intent(this, HimanshuService::class.java)) })
-        root.addView(button("🎤 अभी बोलो (नाम बिना)") {
+        add(tv("① AI की चाबी (Gemini)", 18f, gold))
+        keyState = tv("", 16f); add(keyState)
+        add(btn("📋 चाबी कॉपी कर ली? तो यहाँ दबाइए") { pasteKey() })
+        val keyBox = input("या चाबी यहाँ चिपकाइए", true); add(keyBox)
+        add(btn("🔑 सेव करो") { saveKey(keyBox.text.toString()); keyBox.setText("") })
+
+        add(tv("② शुरू करो", 18f, gold))
+        add(btn("अनुमतियाँ दो") { requestPermissions(perms(), 1) })
+        add(btn("▶ सुनना शुरू करो") { start() })
+        add(btn("⏹ बंद करो") { stopService(Intent(this, HimanshuService::class.java)) })
+        add(btn("🎤 अभी बोलो (नाम बिना)") {
             startForegroundService(Intent(this, HimanshuService::class.java).setAction(HimanshuService.ARM))
         })
-        root.addView(Switch(this).apply {
+        add(Switch(this).apply {
             text = "पहले 'हिमांशु' बोलना ज़रूरी"; setTextColor(Color.WHITE)
             isChecked = prefs.getBoolean("needName", true)
             setOnCheckedChangeListener { _, on -> prefs.edit().putBoolean("needName", on).apply() }
         })
-        val box = EditText(this).apply {
-            hint = "यहाँ टाइप करके आदेश दीजिए"; setTextColor(Color.WHITE); setHintTextColor(Color.GRAY); isSingleLine = true
-        }
+
+        add(tv("③ टाइप करके आदेश दो", 18f, gold))
+        val box = input("जैसे: दो और दो कितने होते हैं"); add(box)
         fun send() {
             val q = box.text.toString().trim()
             if (q.isNotEmpty()) {
@@ -64,37 +94,46 @@ class MainActivity : Activity() {
             }
         }
         box.setOnEditorActionListener { _, _, _ -> send(); true }
-        root.addView(box)
-        root.addView(button("🔎 भेजो") { send() })
-        val keyBox = EditText(this).apply {
-            hint = "Gemini कुंजी (API key) यहाँ चिपकाइए"; setTextColor(Color.WHITE); setHintTextColor(Color.GRAY)
-            isSingleLine = true; inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-        }
-        root.addView(keyBox)
-        root.addView(button("🔑 कुंजी सेव करो") {
-            prefs.edit().putString("apikey", keyBox.text.toString().trim()).apply()
-            keyBox.setText("")
-            Toast.makeText(this, "कुंजी सेव हो गई", Toast.LENGTH_SHORT).show()
-        })
-        status = text("", 16f, Color.parseColor("#9FE870"))
-        root.addView(status)
-        root.addView(text(
-            "\nबोलकर देखिए:\n• हिमांशु, यूट्यूब खोलो\n• हिमांशु, डाउनलोड वाला गाना बजाओ\n• हिमांशु, अगला गाना\n" +
-                "• हिमांशु, राहुल को फोन लगाओ\n• हिमांशु, फोन लगाओ जिसके आखिर में 21 हो\n• हिमांशु, टॉर्च जलाओ\n" +
-                "• हिमांशु, कैमरा खोलो\n• हिमांशु, आवाज़ बढ़ाओ\n• हिमांशु, पाँच मिनट का टाइमर लगाओ\n• हिमांशु, समय क्या हुआ\n\nएक बार 'हिमांशु' बोलिए, फिर 1 मिनट तक नाम बिना बोलते रहिए।\nकिसी भी तरह बोलिए, AI समझ लेगा (इंटरनेट + मुफ़्त Gemini कुंजी चाहिए)\nसुलाना: 'सो जाओ'", 15f, Color.LTGRAY))
+        add(btn("🔎 भेजो") { send() })
+
+        status = tv("", 15f, Color.parseColor("#9FE870")); add(status)
+        add(tv("बोलकर देखिए:\n• हिमांशु, यूट्यूब खोलो\n• हिमांशु, डाउनलोड वाला गाना बजाओ\n• हिमांशु, कॉल द मम्मी\n" +
+            "• हिमांशु, टॉर्च जलाओ\n• हिमांशु, फोन लगाओ जिसके आखिर में 21 हो\n• हिमांशु, पाँच मिनट का टाइमर लगाओ\n\n" +
+            "एक बार 'हिमांशु' बोलिए, फिर 1 मिनट तक नाम बिना बोलते रहिए। सुलाने के लिए: 'सो जाओ'।", 14f, Color.LTGRAY))
         setContentView(ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F1720")); addView(root) })
+        refreshKey()
+    }
+
+    private fun saveKey(k: String) {
+        val key = k.trim()
+        if (key.length < 20 || key.contains(" ")) { toast("यह चाबी जैसी नहीं लगी। aistudio.google.com/apikey से चाबी कॉपी कीजिए"); return }
+        prefs.edit().putString("apikey", key).apply()
+        refreshKey()
+        toast("चाबी सेव हो गई ✅")
+    }
+
+    private fun pasteKey() {
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val t = cm.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString() ?: ""
+        saveKey(t)
+    }
+
+    private fun refreshKey() {
+        val has = !prefs.getString("apikey", "").isNullOrBlank()
+        keyState.text = if (has) "चाबी: सेव है ✅" else "चाबी: अभी नहीं है ❌"
+        keyState.setTextColor(if (has) Color.parseColor("#9FE870") else Color.parseColor("#FF8A80"))
     }
 
     private fun start() {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(this, "पहले 'अनुमतियाँ दो' दबाइए", Toast.LENGTH_LONG).show(); return
+            toast("पहले 'अनुमतियाँ दो' दबाइए"); return
         }
         if (!Settings.canDrawOverlays(this)) askOverlay()
         startForegroundService(Intent(this, HimanshuService::class.java))
     }
 
     private fun askOverlay() {
-        Toast.makeText(this, "'दूसरे ऐप के ऊपर दिखाओ' चालू कीजिए, तभी ऐप/कैमरा खुलेंगे", Toast.LENGTH_LONG).show()
+        toast("'दूसरे ऐप के ऊपर दिखाओ' चालू कीजिए, तभी ऐप/कैमरा खुलेंगे")
         startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
     }
 
@@ -105,10 +144,11 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        refreshKey()
         HimanshuService.onHeard = { s ->
             runOnUiThread {
                 lines.addFirst(s); while (lines.size > 6) lines.removeLast()
-                status.text = "\n" + lines.joinToString("\n")
+                status.text = lines.joinToString("\n")
             }
         }
     }

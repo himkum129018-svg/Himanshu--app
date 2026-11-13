@@ -51,7 +51,13 @@ class HimanshuService : Service() {
 
         brain = Brain(this) { say(it) }
         tts = TextToSpeech(this) { s ->
-            if (s == TextToSpeech.SUCCESS) { tts?.language = Locale("hi", "IN"); tts?.setSpeechRate(1.12f); ttsReady = true }
+            if (s == TextToSpeech.SUCCESS) {
+                val r = tts?.setLanguage(Locale("hi", "IN"))
+                tts?.setSpeechRate(1.12f)
+                ttsReady = true
+                if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED)
+                    onHeard?.invoke("⚠ फोन में हिंदी आवाज़ नहीं है। Settings > Text-to-speech > Google > Install voice data > हिंदी")
+            } else onHeard?.invoke("⚠ बोलने वाला (Text-to-speech) चालू नहीं हो पाया")
         }
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(id: String?) {}
@@ -123,7 +129,7 @@ class HimanshuService : Service() {
         Thread {
             val out = try { Ai.ask(key, c0) } catch (e: Exception) { null }
             handler.post {
-                if (out == null) { say("इंटरनेट या कुंजी में दिक्कत है"); return@post }
+                if (out == null) { onHeard?.invoke("⚠ AI: " + Ai.lastError); say("इंटरनेट या कुंजी में दिक्कत है"); return@post }
                 val reply = out.optString("reply")
                 val cmd2 = Ai.toCommand(out)
                 if (cmd2.isNotBlank()) { if (!brain.handle(Hindi.norm(cmd2)) && reply.isNotBlank()) say(reply) }
