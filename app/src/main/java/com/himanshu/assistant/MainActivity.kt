@@ -87,6 +87,12 @@ class MainActivity : Activity() {
             setOnCheckedChangeListener { _, on -> prefs.edit().putBoolean("needName", on).apply() }
         })
 
+        add(Switch(this).apply {
+            text = "हमेशा Pro (ज़्यादा समझदार, पर धीमा)"; setTextColor(Color.WHITE)
+            isChecked = prefs.getBoolean("pro", false)
+            setOnCheckedChangeListener { _, on -> prefs.edit().putBoolean("pro", on).apply() }
+        })
+
         add(tv("③ टाइप करके आदेश दो", 18f, gold))
         val box = input("जैसे: दो और दो कितने होते हैं"); add(box)
         fun send() {
@@ -101,7 +107,7 @@ class MainActivity : Activity() {
 
         status = tv("", 15f, Color.parseColor("#9FE870")); add(status)
         add(tv("बोलकर देखिए:\n• हिमांशु, यूट्यूब खोलो\n• हिमांशु, डाउनलोड वाला गाना बजाओ\n• हिमांशु, कॉल द मम्मी\n" +
-            "• हिमांशु, टॉर्च जलाओ\n• हिमांशु, फोन लगाओ जिसके आखिर में 21 हो\n• हिमांशु, पाँच मिनट का टाइमर लगाओ\n\n" +
+            "• हिमांशु, टॉर्च जलाओ\n• हिमांशु, फोन लगाओ जिसके आखिर में 21 हो\n• हिमांशु, पाँच मिनट का टाइमर लगाओ\n• हिमांशु, सुबह सात बजे का अलार्म लगाओ\n• हिमांशु, याद रखो कि ... (फोन में ही रहेगा)\n• हिमांशु, तुमने क्या याद रखा\n\n" +
             "एक बार 'हिमांशु' बोलिए, फिर 1 मिनट तक नाम बिना बोलते रहिए। सुलाने के लिए: 'सो जाओ'।", 14f, Color.LTGRAY))
         setContentView(ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F1720")); addView(root) })
         refreshKey()

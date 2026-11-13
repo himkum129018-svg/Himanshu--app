@@ -1,33 +1,5 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <path android:pathData="M54,54m-50,0a50,50 0,1 1,100 0a50,50 0,1 1,-100 0">
-        <aapt:attr name="android:fillColor">
-            <gradient android:startX="18" android:startY="12" android:endX="92" android:endY="100" android:type="linear">
-                <item android:offset="0" android:color="#3B2A9E"/>
-                <item android:offset="1" android:color="#070B24"/>
-            </gradient>
-        </aapt:attr>
-    </path>
-    <path android:fillColor="#00000000" android:strokeWidth="3" android:pathData="M54,54m-46,0a46,46 0,1 1,92 0a46,46 0,1 1,-92 0">
-        <aapt:attr name="android:strokeColor">
-            <gradient android:startX="10" android:startY="10" android:endX="98" android:endY="98" android:type="linear">
-                <item android:offset="0" android:color="#FFE9A0"/>
-                <item android:offset="0.5" android:color="#D4AF37"/>
-                <item android:offset="1" android:color="#8A6A12"/>
-            </gradient>
-        </aapt:attr>
-    </path>
-    <path android:fillColor="#22FFFFFF" android:pathData="M54,54m-38,0a38,38 0,1 1,76 0a38,38 0,1 1,-76 0"/>
-    <path android:pathData="M33,31h9v17h24v-17h9v46h-9v-19h-24v19h-9z">
-        <aapt:attr name="android:fillColor">
-            <gradient android:startX="33" android:startY="31" android:endX="75" android:endY="77" android:type="linear">
-                <item android:offset="0" android:color="#FFF1B8"/>
-                <item android:offset="0.55" android:color="#E2B93B"/>
-                <item android:offset="1" android:color="#A67C1B"/>
-            </gradient>
-        </aapt:attr>
-    </path>
-    <path android:fillColor="#00000000" android:strokeColor="#5BD6FF" android:strokeWidth="3.5" android:strokeLineCap="round"
-        android:pathData="M83,42a16,16 0,0 1,0 24 M90,35a26,26 0,0 1,0 38 M25,42a16,16 0,0 0,0 24 M18,35a26,26 0,0 0,0 38"/>
+    <path android:fillColor="#1E3A8A" android:pathData="M54,54m-50,0a50,50 0,1 1,100 0a50,50 0,1 1,-100 0"/>
+    <path android:fillColor="#FFFFFF" android:pathData="M33,31h9v17h24v-17h9v46h-9v-19h-24v19h-9z"/>
 </vector>

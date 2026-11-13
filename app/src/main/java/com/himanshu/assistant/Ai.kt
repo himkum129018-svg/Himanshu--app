@@ -16,12 +16,36 @@ action इनमें से एक: torch_on, torch_off, play_music (arg = ग
 reply = बोलने के लिए छोटा हिंदी वाक्य। साधारण सवाल या बातचीत हो तो action none रखो और जवाब reply में दो।"""
 
     @Volatile var lastError = ""
-    private val MODELS = listOf("gemini-flash-lite-latest", "gemini-flash-latest")
+    private val FAST = listOf("gemini-flash-latest", "gemini-flash-lite-latest")
+    private val SMART = listOf("gemini-pro-latest", "gemini-flash-latest", "gemini-flash-lite-latest")
+    private val HARD = listOf("समझाओ", "समझा", "क्यों", "कैसे", "फर्क", "अंतर", "कारण", "विस्तार", "सलाह",
+        "explain", "why", "how", "difference").map { Hindi.norm(it) }
 
-    fun ask(key: String, text: String, history: List<Pair<String, String>>): JSONObject? {
-        for (m in MODELS) {
-            val r = try { call(key, m, text, history) } catch (e: Exception) { lastError = m + ": " + (e.message ?: "error"); null }
+    private fun isHard(t: String): Boolean { val n = Hindi.norm(t); return HARD.any { n.contains(it) } }
+
+    /** निजी सुरक्षा: 4+ अंक या बोले हुए 4+ अंक (फोन नंबर जैसे) Google को नहीं जाते. */
+    fun scrub(t: String): String {
+        val toks = Hindi.norm(t).split(" ")
+        val out = ArrayList<String>()
+        var run = ArrayList<String>()
+        fun isNum(w: String) = w.isNotEmpty() && (w.all { it.isDigit() } || Hindi.NUMS.contains(w))
+        fun flush() { if (run.size >= 4 || run.joinToString("").length >= 4 && run.all { it.all { c -> c.isDigit() } }) out.add("…") else out.addAll(run); run = ArrayList() }
+        for (w in toks) { if (isNum(w)) run.add(w) else { flush(); out.add(w) } }
+        flush()
+        return out.joinToString(" ")
+    }
+
+    fun ask(key: String, text0: String, history0: List<Pair<String, String>>, alwaysPro: Boolean = false): JSONObject? {
+        val text = scrub(text0)
+        val history = history0.map { scrub(it.first) to it.second }
+        val models = if (alwaysPro || isHard(text)) SMART else FAST
+        for (m in models) {
+            val r = try { call(key, m, text, history, true) } catch (e: Exception) { lastError = m + ": " + (e.message ?: "error"); null }
             if (r != null) return r
+            if (lastError.contains("HTTP 400")) {
+                val r2 = try { call(key, m, text, history, false) } catch (e: Exception) { null }
+                if (r2 != null) return r2
+            }
         }
         return null
     }
@@ -29,19 +53,21 @@ reply = बोलने के लिए छोटा हिंदी वाक�
     private fun part(role: String, t: String) =
         JSONObject().put("role", role).put("parts", JSONArray().put(JSONObject().put("text", t)))
 
-    private fun call(key: String, model: String, text: String, history: List<Pair<String, String>>): JSONObject? {
+    private fun call(key: String, model: String, text: String, history: List<Pair<String, String>>, noThink: Boolean): JSONObject? {
+        val pro = model.contains("pro")
         val contents = JSONArray()
         for ((u, a) in history) { contents.put(part("user", u)); contents.put(part("model", a)) }
         contents.put(part("user", text))
         val body = JSONObject()
             .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", SYS))))
             .put("contents", contents)
-            .put("generationConfig", JSONObject().put("maxOutputTokens", 300).put("responseMimeType", "application/json"))
+            .put("generationConfig", JSONObject().put("maxOutputTokens", if (pro) 1500 else 400).put("responseMimeType", "application/json")
+                .also { if (noThink && !pro) it.put("thinkingConfig", JSONObject().put("thinkingBudget", 0)) })
         val con = URL("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent")
             .openConnection() as HttpURLConnection
         con.requestMethod = "POST"
-        con.connectTimeout = 4000
-        con.readTimeout = 9000
+        con.connectTimeout = 3000
+        con.readTimeout = if (pro) 9000 else 5000
         con.doOutput = true
         con.setRequestProperty("x-goog-api-key", key)
         con.setRequestProperty("content-type", "application/json")

@@ -56,6 +56,10 @@ class Brain(private val c: Context, private val say: (String) -> Unit) {
     fun handle(t: String): Boolean {
         val tokens = t.split(" ")
         return when {
+            has(t, "क्या याद", "नोट सुनाओ", "मेरे नोट") -> { recall(); true }
+            has(t, "सब भूल जाओ", "नोट मिटाओ") -> { saveNotes(emptyList()); say("सब मिटा दिया"); true }
+            has(t, "याद रखो", "याद रख") -> { remember(t); true }
+            has(t, "अलार्म", "alarm") -> alarm(t, tokens)
             has(t, "टॉर्च", "टार्च", "torch", "फ्लैश", "फ्लेश", "बत्ती", "लाइट", "light", "रोशनी", "प्रकाश") -> { torch(t); true }
             has(t, "टाइमर", "टाईमर", "timer") -> timer(t, tokens)
             has(t, "कैमरा", "कैमेरा", "camera", "सेल्फी", "फोटो खींच", "फोटो ले", "फोटो निकाल", "वीडियो बना") -> { camera(t); true }
@@ -78,6 +82,34 @@ class Brain(private val c: Context, private val say: (String) -> Unit) {
             has(t, "खोल", "ओपन", "open", "चालू", "चला", "स्टार्ट", "शुरू", "लगाओ") -> openApp(t)
             else -> false
         }
+    }
+
+    // ---------- निजी नोट (सिर्फ़ फोन में, कहीं नहीं जाते) ----------
+    private fun notes(): MutableList<String> =
+        (c.getSharedPreferences("him", Context.MODE_PRIVATE).getString("notes", "") ?: "").split("\n").filter { it.isNotBlank() }.toMutableList()
+    private fun saveNotes(l: List<String>) { c.getSharedPreferences("him", Context.MODE_PRIVATE).edit().putString("notes", l.joinToString("\n")).apply() }
+    private fun remember(t: String) {
+        val body = t.substringAfter("याद रख").trimStart { it in "ोनाें " }
+        if (body.isBlank()) { say("क्या याद रखूँ?"); return }
+        val l = notes(); l.add(body); saveNotes(l)
+        say("ठीक है, याद रख लिया")
+    }
+    private fun recall() {
+        val l = notes()
+        if (l.isEmpty()) say("अभी तुमने मुझे कुछ याद रखने को नहीं कहा") else say("तुमने ये बताया है। " + l.joinToString("। "))
+    }
+
+    private fun alarm(t: String, tokens: List<String>): Boolean {
+        val i = tokens.indexOfFirst { it.startsWith("बज") }
+        val prev = if (i > 0) tokens[i - 1] else ""
+        val n = prev.toIntOrNull() ?: Hindi.NUMS.indexOf(prev).takeIf { it >= 0 } ?: Hindi.digitsFrom(tokens, 8).toIntOrNull()
+        if (n == null) { say("कितने बजे का अलार्म?"); return true }
+        var h = n % 24
+        if (has(t, "शाम", "रात", "दोपहर") && h in 1..11) h += 12
+        val m = if (has(t, "साढ़े", "साढे")) 30 else 0
+        go(Intent(AlarmClock.ACTION_SET_ALARM).putExtra(AlarmClock.EXTRA_HOUR, h).putExtra(AlarmClock.EXTRA_MINUTES, m).putExtra(AlarmClock.EXTRA_SKIP_UI, true))
+        say("अलार्म लगा दिया, $h बजकर $m मिनट")
+        return true
     }
 
     // ---------- फोन ----------
@@ -190,7 +222,7 @@ class Brain(private val c: Context, private val say: (String) -> Unit) {
             player = MediaPlayer().apply {
                 setWakeMode(c, PowerManager.PARTIAL_WAKE_LOCK)
                 setDataSource(c, queue[idx].uri)
-                setVolume(0.45f, 0.45f)
+                setVolume(0.2f, 0.2f)
                 setOnCompletionListener { idx++; playIdx() }
                 prepare(); start()
             }

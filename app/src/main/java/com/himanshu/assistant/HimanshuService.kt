@@ -88,7 +88,11 @@ class HimanshuService : Service() {
     }
 
     private val listener = object : RecognitionListener {
-        override fun onPartialResult(h: String?) {}
+        override fun onPartialResult(h: String?) {
+            if (!brain.isPlaying()) return
+            val p = try { JSONObject(h ?: return).optString("partial") } catch (e: Exception) { return }
+            if (p.isNotBlank() && brain.isStop(Hindi.norm(p))) handler.post { if (brain.isPlaying()) { brain.stopNow(); onHeard?.invoke("⏹ गाना रोक दिया") } }
+        }
         override fun onFinalResult(h: String?) {}
         override fun onTimeout() {}
         override fun onError(e: Exception?) { onHeard?.invoke("⚠ ${e?.message}") }
@@ -130,6 +134,7 @@ class HimanshuService : Service() {
         val n = System.currentTimeMillis()
         if (handled) return
         val key = prefs.getString("apikey", "") ?: ""
+        if (isPrivate(c0)) { say("यह निजी बात है, मैं इसे बाहर नहीं भेजता। फोन में ही कर सकता हूँ तो बोलिए: फोन लगाओ, गाना बजाओ वग़ैरह"); return }
         if (key.isBlank()) {
             if (n - lastFail > 10000) { lastFail = n; say("समझ नहीं आया") }
             return
@@ -142,7 +147,7 @@ class HimanshuService : Service() {
         val snapshot = ArrayList(hist)
         Thread {
             val t0 = System.currentTimeMillis()
-            val out = try { Ai.ask(key, c0, snapshot) } catch (e: Exception) { null }
+            val out = try { Ai.ask(key, c0, snapshot, prefs.getBoolean("pro", false)) } catch (e: Exception) { null }
             val ms = System.currentTimeMillis() - t0
             handler.post {
                 onHeard?.invoke("⏱ AI: " + (ms / 100) / 10.0 + " सेकंड")
@@ -155,6 +160,10 @@ class HimanshuService : Service() {
             }
         }.start()
     }
+
+    private val PRIVATE = listOf("फोन", "कॉल", "call", "नंबर", "number", "इंस्टाग्राम", "instagram", "पासवर्ड", "password",
+        "ओटीपी", "otp", "बैंक", "bank", "पिन", "व्हाट्सएप", "whatsapp", "मैसेज", "message", "खाता", "कार्ड").map { Hindi.norm(it) }
+    private fun isPrivate(t: String): Boolean { val n = Hindi.norm(t); return PRIVATE.any { n.contains(it) } }
 
     private fun aiFailMessage(): String {
         val e = Ai.lastError
