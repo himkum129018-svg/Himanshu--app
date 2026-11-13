@@ -13,7 +13,7 @@ action इनमें से एक: torch_on, torch_off, play_music (arg = ग
 reply = बोलने के लिए बहुत छोटा हिंदी वाक्य। साधारण सवाल या बातचीत हो तो action none रखो और जवाब reply में दो।"""
 
     @Volatile var lastError = ""
-    private val MODELS = listOf("gemini-flash-latest", "gemini-flash-lite-latest")
+    private val MODELS = listOf("gemini-flash-lite-latest", "gemini-flash-latest")
 
     fun ask(key: String, text: String): JSONObject? {
         for (m in MODELS) {
@@ -28,12 +28,12 @@ reply = बोलने के लिए बहुत छोटा हिंद�
             .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", SYS))))
             .put("contents", JSONArray().put(JSONObject().put("role", "user")
                 .put("parts", JSONArray().put(JSONObject().put("text", text)))))
-            .put("generationConfig", JSONObject().put("maxOutputTokens", 600).put("responseMimeType", "application/json"))
+            .put("generationConfig", JSONObject().put("maxOutputTokens", 300).put("responseMimeType", "application/json"))
         val con = URL("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent")
             .openConnection() as HttpURLConnection
         con.requestMethod = "POST"
-        con.connectTimeout = 6000
-        con.readTimeout = 12000
+        con.connectTimeout = 4000
+        con.readTimeout = 9000
         con.doOutput = true
         con.setRequestProperty("x-goog-api-key", key)
         con.setRequestProperty("content-type", "application/json")

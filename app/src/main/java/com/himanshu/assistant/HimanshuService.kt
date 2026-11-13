@@ -128,9 +128,17 @@ class HimanshuService : Service() {
             if (n - lastFail > 10000) { lastFail = n; say("समझ नहीं आया") }
             return
         }
+        try {
+            val tg = android.media.ToneGenerator(android.media.AudioManager.STREAM_MUSIC, 70)
+            tg.startTone(android.media.ToneGenerator.TONE_PROP_ACK, 120)
+            handler.postDelayed({ tg.release() }, 500)
+        } catch (e: Exception) {}
         Thread {
+            val t0 = System.currentTimeMillis()
             val out = try { Ai.ask(key, c0) } catch (e: Exception) { null }
+            val ms = System.currentTimeMillis() - t0
             handler.post {
+                onHeard?.invoke("⏱ AI: " + (ms / 100) / 10.0 + " सेकंड")
                 if (out == null) { onHeard?.invoke("⚠ AI: " + Ai.lastError); say("इंटरनेट या कुंजी में दिक्कत है"); return@post }
                 val reply = out.optString("reply")
                 val cmd2 = Ai.toCommand(out)
