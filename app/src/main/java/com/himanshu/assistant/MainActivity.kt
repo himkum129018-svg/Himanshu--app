@@ -74,6 +74,9 @@ class MainActivity : Activity() {
         add(tv("② शुरू करो", 18f, gold))
         add(btn("अनुमतियाँ दो") { requestPermissions(perms(), 1) })
         add(btn("▶ सुनना शुरू करो") { start() })
+        add(btn("🎧 माइक फिर से चालू करो") {
+            startForegroundService(Intent(this, HimanshuService::class.java).setAction(HimanshuService.RESUME))
+        })
         add(btn("⏹ बंद करो") { stopService(Intent(this, HimanshuService::class.java)) })
         add(btn("🎤 अभी बोलो (नाम बिना)") {
             startForegroundService(Intent(this, HimanshuService::class.java).setAction(HimanshuService.ARM))

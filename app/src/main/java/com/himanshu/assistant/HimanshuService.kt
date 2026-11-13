@@ -26,6 +26,7 @@ class HimanshuService : Service() {
         var onHeard: ((String) -> Unit)? = null
         const val ARM = "arm"
         const val CMD = "cmd"
+        const val RESUME = "resume"
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -76,6 +77,7 @@ class HimanshuService : Service() {
             val rec = Recognizer(model!!, 16000.0f)
             speech = SpeechService(rec, 16000.0f)
             speech?.startListening(listener)
+            onHeard?.invoke("🎧 सुन रहा हूँ")
             say("हिमांशु तैयार है")
         } catch (e: Exception) { onHeard?.invoke("⚠ माइक नहीं चला: ${e.message}") }
     }
@@ -138,13 +140,21 @@ class HimanshuService : Service() {
         }.start()
     }
 
+    private var sayGen = 0
+
     fun say(text: String) {
         handler.post {
             onHeard?.invoke("🔊 $text")
             if (!ttsReady) return@post
             speech?.setPause(true)
             pending++
-            tts?.speak(text, TextToSpeech.QUEUE_ADD, null, "u" + System.nanoTime())
+            val gen = ++sayGen
+            val r = tts?.speak(text, TextToSpeech.QUEUE_ADD, null, "u" + System.nanoTime())
+            if (r != TextToSpeech.SUCCESS) pending--
+            // भरोसेमंद वापसी: आवाज़ ख़त्म हो न हो, माइक थोड़ी देर बाद फिर चालू हो जाएगा
+            handler.postDelayed({
+                if (gen == sayGen) { pending = 0; speech?.setPause(false); onHeard?.invoke("🎧 सुन रहा हूँ") }
+            }, 900L + text.length * 110L)
         }
     }
 
@@ -155,6 +165,9 @@ class HimanshuService : Service() {
     }
 
     override fun onStartCommand(i: Intent?, f: Int, id: Int): Int {
+        if (i?.action == RESUME) {
+            pending = 0; speech?.setPause(false); onHeard?.invoke("🎧 माइक चालू कर दिया")
+        }
         if (i?.action == CMD) {
             val txt = i?.getStringExtra("text") ?: ""
             if (txt.isNotBlank()) runCommand(Hindi.norm(txt), getSharedPreferences("him", MODE_PRIVATE))
