@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import org.json.JSONObject
@@ -37,6 +38,8 @@ class HimanshuService : Service() {
     private var pending = 0
     private var armedUntil = 0L
     private lateinit var brain: Brain
+    private var wl: PowerManager.WakeLock? = null
+    private val hist = ArrayList<Pair<String, String>>()
 
     override fun onBind(i: Intent?): IBinder? = null
 
@@ -50,6 +53,8 @@ class HimanshuService : Service() {
         if (Build.VERSION.SDK_INT >= 29) startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
         else startForeground(1, n)
 
+        wl = (getSystemService(POWER_SERVICE) as PowerManager).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "himanshu:listen")
+        try { wl?.acquire() } catch (e: Exception) {}
         brain = Brain(this) { say(it) }
         tts = TextToSpeech(this) { s ->
             if (s == TextToSpeech.SUCCESS) {
@@ -102,10 +107,11 @@ class HimanshuService : Service() {
         val hasName = tokens.any { Hindi.isWake(it) }
         val armed = System.currentTimeMillis() < armedUntil
         onHeard?.invoke("👂 $t")
+        if (brain.isPlaying() && brain.isStop(t)) { brain.stopNow(); return }
         if (needName && !hasName && !armed) return
         var cmd = tokens.filter { !Hindi.isWake(it) }.joinToString(" ")
         val now = System.currentTimeMillis()
-        if (cmd.isBlank()) { armedUntil = now + 60000; say("हाँ बोलो"); return }
+        if (cmd.isBlank()) { armedUntil = now + 180000; say("हाँ बोलो"); return }
         if (cmd.contains("सो जाओ") || cmd.contains("धन्यवाद") || cmd.contains("शुक्रिया")) {
             armedUntil = 0; say("ठीक है, जब ज़रूरत हो हिमांशु बोलिए"); return
         }
@@ -120,7 +126,7 @@ class HimanshuService : Service() {
             if (k.isNotBlank() && cmd.contains(k)) cmd = cmd.replace(k, line.substringAfter("="))
         }
         val handled = brain.handle(cmd)
-        armedUntil = System.currentTimeMillis() + (if (brain.isPlaying()) 15000 else 60000)
+        armedUntil = System.currentTimeMillis() + (if (brain.isPlaying()) 40000 else 180000)
         val n = System.currentTimeMillis()
         if (handled) return
         val key = prefs.getString("apikey", "") ?: ""
@@ -133,19 +139,30 @@ class HimanshuService : Service() {
             tg.startTone(android.media.ToneGenerator.TONE_PROP_ACK, 120)
             handler.postDelayed({ tg.release() }, 500)
         } catch (e: Exception) {}
+        val snapshot = ArrayList(hist)
         Thread {
             val t0 = System.currentTimeMillis()
-            val out = try { Ai.ask(key, c0) } catch (e: Exception) { null }
+            val out = try { Ai.ask(key, c0, snapshot) } catch (e: Exception) { null }
             val ms = System.currentTimeMillis() - t0
             handler.post {
                 onHeard?.invoke("⏱ AI: " + (ms / 100) / 10.0 + " सेकंड")
-                if (out == null) { onHeard?.invoke("⚠ AI: " + Ai.lastError); say("इंटरनेट या कुंजी में दिक्कत है"); return@post }
+                if (out == null) { onHeard?.invoke("⚠ AI: " + Ai.lastError); say(aiFailMessage()); return@post }
                 val reply = out.optString("reply")
+                hist.add(c0 to out.toString()); while (hist.size > 6) hist.removeAt(0)
                 val cmd2 = Ai.toCommand(out)
                 if (cmd2.isNotBlank()) { if (!brain.handle(Hindi.norm(cmd2)) && reply.isNotBlank()) say(reply) }
                 else say(if (reply.isNotBlank()) reply else "समझ नहीं आया")
             }
         }.start()
+    }
+
+    private fun aiFailMessage(): String {
+        val e = Ai.lastError
+        return when {
+            e.contains("429") -> "अभी AI थोड़ा व्यस्त है, एक पल रुककर फिर बोलिए"
+            e.contains("400") || e.contains("401") || e.contains("403") -> "चाबी सही नहीं लग रही, ऐप में दोबारा डाल दीजिए"
+            else -> "इंटरनेट नहीं चल रहा लगता है"
+        }
     }
 
     private var sayGen = 0
@@ -185,7 +202,7 @@ class HimanshuService : Service() {
     }
 
     override fun onDestroy() {
-        try { speech?.stop(); speech?.shutdown(); model?.close(); tts?.shutdown(); brain.release() } catch (e: Exception) {}
+        try { wl?.release(); speech?.stop(); speech?.shutdown(); model?.close(); tts?.shutdown(); brain.release() } catch (e: Exception) {}
         super.onDestroy()
     }
 }

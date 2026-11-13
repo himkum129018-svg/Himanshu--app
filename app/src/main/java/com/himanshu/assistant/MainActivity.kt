@@ -132,6 +132,13 @@ class MainActivity : Activity() {
             toast("पहले 'अनुमतियाँ दो' दबाइए"); return
         }
         if (!Settings.canDrawOverlays(this)) askOverlay()
+        else {
+            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                toast("'अनुमति दो' दबाइए, ताकि हिमांशु हमेशा सुनता रहे")
+                startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
+            }
+        }
         startForegroundService(Intent(this, HimanshuService::class.java))
     }
 

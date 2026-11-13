@@ -7,27 +7,35 @@ import java.net.URL
 
 /** जो आदेश नियमों से न समझ आए, उसे Google के Gemini AI से समझवाता है. */
 object Ai {
-    private const val SYS = """तुम एक फ़ोन असिस्टेंट हो। उपयोगकर्ता हिंदी, अंग्रेज़ी या दोनों मिलाकर बोलता है। उसकी बात आवाज़ से लिखी गई है, इसलिए शब्द बिगड़े हुए हो सकते हैं (जैसे अंग्रेज़ी शब्द देवनागरी में); मतलब का अंदाज़ा लगाओ।
+    private const val SYS = """तुम "हिमांशु" हो, हिमांशु (असली इंसान) के फ़ोन के निजी असिस्टेंट। तुम्हें हिमांशु ने खुद, अपने निजी इस्तेमाल के लिए बनाया है। कोई पूछे कि तुम्हें किसने बनाया, तो कहो: "मुझे हिमांशु ने बनाया है, अपने निजी इस्तेमाल के लिए।" खुद को कभी भाषा मॉडल या किसी कंपनी का AI मत बताओ।
+बोलने का ढंग: एक समझदार दोस्त की तरह, सहज बोलचाल की हिंदी, छोटे वाक्य (एक या दो)। हर बार "माफ़ कीजिए" या "क्या मैं और मदद कर सकता हूँ" मत कहो।
+उपयोगकर्ता हिंदी, अंग्रेज़ी या दोनों मिलाकर बोलता है। बात आवाज़ से लिखी गई है, इसलिए शब्द बिगड़े हो सकते हैं (अंग्रेज़ी शब्द देवनागरी में भी); मतलब का सही अंदाज़ा लगाओ। पिछली बातों को ध्यान में रखो।
+जो जानकारी तुम्हारे पास नहीं है (जैसे उसके इंस्टाग्राम के फॉलोअर्स, आज का ताज़ा मौसम, ताज़ा ख़बरें), उसे बनाकर मत बताओ। सीधे कहो कि यह तुम्हें अभी दिख नहीं रहा, और जहाँ हो सके वहाँ ऐप खोलने या गूगल/यूट्यूब पर खोजने वाला action दो।
 सिर्फ़ एक JSON दो, और कुछ नहीं: {"action":"...","arg":"...","reply":"..."}
 action इनमें से एक: torch_on, torch_off, play_music (arg = गाने का नाम, या खाली), stop_music, next_song, youtube_search (arg), google_search (arg), open_app (arg = ऐप का नाम), call_name (arg = नाम), call_digits (arg = नंबर के आख़िरी अंक), volume_up, volume_down, volume_max, time, date, battery, camera, timer (arg = मिनट की संख्या), none.
-reply = बोलने के लिए बहुत छोटा हिंदी वाक्य। साधारण सवाल या बातचीत हो तो action none रखो और जवाब reply में दो।"""
+reply = बोलने के लिए छोटा हिंदी वाक्य। साधारण सवाल या बातचीत हो तो action none रखो और जवाब reply में दो।"""
 
     @Volatile var lastError = ""
     private val MODELS = listOf("gemini-flash-lite-latest", "gemini-flash-latest")
 
-    fun ask(key: String, text: String): JSONObject? {
+    fun ask(key: String, text: String, history: List<Pair<String, String>>): JSONObject? {
         for (m in MODELS) {
-            val r = try { call(key, m, text) } catch (e: Exception) { lastError = m + ": " + (e.message ?: "error"); null }
+            val r = try { call(key, m, text, history) } catch (e: Exception) { lastError = m + ": " + (e.message ?: "error"); null }
             if (r != null) return r
         }
         return null
     }
 
-    private fun call(key: String, model: String, text: String): JSONObject? {
+    private fun part(role: String, t: String) =
+        JSONObject().put("role", role).put("parts", JSONArray().put(JSONObject().put("text", t)))
+
+    private fun call(key: String, model: String, text: String, history: List<Pair<String, String>>): JSONObject? {
+        val contents = JSONArray()
+        for ((u, a) in history) { contents.put(part("user", u)); contents.put(part("model", a)) }
+        contents.put(part("user", text))
         val body = JSONObject()
             .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", SYS))))
-            .put("contents", JSONArray().put(JSONObject().put("role", "user")
-                .put("parts", JSONArray().put(JSONObject().put("text", text)))))
+            .put("contents", contents)
             .put("generationConfig", JSONObject().put("maxOutputTokens", 300).put("responseMimeType", "application/json"))
         val con = URL("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent")
             .openConnection() as HttpURLConnection

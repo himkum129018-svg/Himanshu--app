@@ -29,6 +29,9 @@ class Brain(private val c: Context, private val say: (String) -> Unit) {
 
     fun isPlaying(): Boolean = try { player?.isPlaying == true } catch (e: Exception) { false }
     fun release() = stopMusic()
+    fun stopNow() = stopMusic()
+    fun isStop(t: String): Boolean = has(t, "बंद", "बन्द", "रोको", "रोक दो", "रुको", "रुक", "चुप", "स्टॉप", "स्टाप", "stop", "पॉज", "बस करो", "बस कर") &&
+        !has(t, "टॉर्च", "टार्च", "लाइट", "बत्ती", "आवाज", "वॉल्यूम", "फ्लैश")
 
     private fun ok(p: String) = c.checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
     private fun go(i: Intent): Boolean = try { c.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); true } catch (e: Exception) { false }
@@ -63,7 +66,8 @@ class Brain(private val c: Context, private val say: (String) -> Unit) {
             has(t, "कौन सा दिन", "कौनसा दिन", "कौन सा वार", "कौनसा वार") -> { day(); true }
             has(t, "तारीख", "तारिख", "डेट", "तिथि", "दिनांक") -> { date(); true }
             has(t, "नमस्ते", "नमस्कार", "हैलो", "हेलो", "hello", "प्रणाम") -> { say("नमस्ते! बोलिए"); true }
-            has(t, "नाम क्या", "कौन हो", "तुम्हारा नाम", "आपका नाम") -> { say("मेरा नाम हिमांशु है"); true }
+            has(t, "किसने बनाया", "किसने तुम्हें", "तुम्हें किसने", "तुम्हे किसने", "आपको किसने", "बनाया किसने", "बनाने वाला", "कौन बनाया", "who made", "who created") -> { say("मुझे हिमांशु ने बनाया है, अपने निजी इस्तेमाल के लिए"); true }
+            has(t, "नाम क्या", "कौन हो", "तुम्हारा नाम", "आपका नाम") -> { say("मैं हिमांशु हूँ, हिमांशु का निजी असिस्टेंट"); true }
             has(t, "कैसे हो", "कैसी हो", "कैसे हैं") -> { say("मैं बढ़िया हूँ, आप बताइए"); true }
             isCall(t) -> call(t, tokens)
             has(t, "रोको", "रुको", "बंद करो", "बंद कर", "चुप", "स्टॉप", "stop", "पॉज") -> { stopMusic(); true }
@@ -186,6 +190,7 @@ class Brain(private val c: Context, private val say: (String) -> Unit) {
             player = MediaPlayer().apply {
                 setWakeMode(c, PowerManager.PARTIAL_WAKE_LOCK)
                 setDataSource(c, queue[idx].uri)
+                setVolume(0.45f, 0.45f)
                 setOnCompletionListener { idx++; playIdx() }
                 prepare(); start()
             }
