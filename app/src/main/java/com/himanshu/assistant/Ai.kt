@@ -11,8 +11,9 @@ object Ai {
 बोलने का ढंग: एक समझदार दोस्त की तरह, सहज बोलचाल की हिंदी, छोटे वाक्य (एक या दो)। हर बार "माफ़ कीजिए" या "क्या मैं और मदद कर सकता हूँ" मत कहो।
 उपयोगकर्ता हिंदी, अंग्रेज़ी या दोनों मिलाकर बोलता है। बात आवाज़ से लिखी गई है, इसलिए शब्द बिगड़े हो सकते हैं (अंग्रेज़ी शब्द देवनागरी में भी); मतलब का सही अंदाज़ा लगाओ। पिछली बातों को ध्यान में रखो।
 जो जानकारी तुम्हारे पास नहीं है (जैसे उसके इंस्टाग्राम के फॉलोअर्स, आज का ताज़ा मौसम, ताज़ा ख़बरें), उसे बनाकर मत बताओ। सीधे कहो कि यह तुम्हें अभी दिख नहीं रहा, और जहाँ हो सके वहाँ ऐप खोलने या गूगल/यूट्यूब पर खोजने वाला action दो।
+ध्यान से सुनो और जो बोला गया वही करो: "डाउनलोड" बोला तो play_download, "यूट्यूब" बोला तो play_youtube, "दूसरा/अगला/बदलो" बोला तो next_song, "रोको/बंद" बोला तो stop_music। अपनी तरफ़ से कोई दूसरा विकल्प मत चुनो। इंसान की तरह पूरी बात का मतलब समझो, सिर्फ़ एक-दो शब्द पकड़कर मत चलो।
 सिर्फ़ एक JSON दो, और कुछ नहीं: {"action":"...","arg":"...","reply":"..."}
-action इनमें से एक: torch_on, torch_off, play_music (arg = गाने का नाम, या खाली), stop_music, next_song, youtube_search (arg), google_search (arg), open_app (arg = ऐप का नाम), call_name (arg = नाम), call_digits (arg = नंबर के आख़िरी अंक), volume_up, volume_down, volume_max, time, date, battery, camera, timer (arg = मिनट की संख्या), none.
+action इनमें से एक: torch_on, torch_off, play_music (फोन में रखा गाना; arg = नाम या खाली), play_download (सिर्फ़ Download फोल्डर वाला गाना; arg = नाम या खाली), play_youtube (यूट्यूब से गाना; arg = नाम या खाली), stop_music, next_song (दूसरा/अगला गाना), youtube_search (arg), google_search (arg), open_app (arg = ऐप का नाम), call_name (arg = नाम), call_digits (arg = नंबर के आख़िरी अंक), volume_up, volume_down, volume_max, time, date, battery, camera, timer (arg = मिनट की संख्या), none.
 reply = बोलने के लिए छोटा हिंदी वाक्य। साधारण सवाल या बातचीत हो तो action none रखो और जवाब reply में दो।"""
 
     @Volatile var lastError = ""
@@ -38,9 +39,9 @@ reply = बोलने के लिए छोटा हिंदी वाक�
     fun ask(key: String, text0: String, history0: List<Pair<String, String>>, alwaysPro: Boolean = false): JSONObject? {
         val text = scrub(text0)
         val history = history0.map { scrub(it.first) to it.second }
-        val models = if (alwaysPro || isHard(text)) SMART else FAST
-        for (m in models) {
-            val r = try { call(key, m, text, history, true) } catch (e: Exception) { lastError = m + ": " + (e.message ?: "error"); null }
+        val deep = alwaysPro || isHard(text)
+        for (m in FAST) {
+            val r = try { call(key, m, text, history, !deep) } catch (e: Exception) { lastError = m + ": " + (e.message ?: "error"); null }
             if (r != null) return r
             if (lastError.contains("HTTP 400")) {
                 val r2 = try { call(key, m, text, history, false) } catch (e: Exception) { null }
@@ -54,7 +55,7 @@ reply = बोलने के लिए छोटा हिंदी वाक�
         JSONObject().put("role", role).put("parts", JSONArray().put(JSONObject().put("text", t)))
 
     private fun call(key: String, model: String, text: String, history: List<Pair<String, String>>, noThink: Boolean): JSONObject? {
-        val pro = model.contains("pro")
+        val pro = !noThink
         val contents = JSONArray()
         for ((u, a) in history) { contents.put(part("user", u)); contents.put(part("model", a)) }
         contents.put(part("user", text))
@@ -91,6 +92,8 @@ reply = बोलने के लिए छोटा हिंदी वाक�
             "torch_on" -> "टॉर्च जलाओ"
             "torch_off" -> "टॉर्च बंद करो"
             "play_music" -> "गाना बजाओ $g"
+            "play_download" -> "डाउनलोड वाला गाना बजाओ $g"
+            "play_youtube" -> "यूट्यूब पर $g गाना बजाओ"
             "stop_music" -> "गाना रोको"
             "next_song" -> "अगला गाना"
             "youtube_search" -> "यूट्यूब पर $g खोजो"

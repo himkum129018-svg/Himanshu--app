@@ -87,6 +87,9 @@ class HimanshuService : Service() {
         } catch (e: Exception) { onHeard?.invoke("⚠ माइक नहीं चला: ${e.message}") }
     }
 
+    private var buf = ""
+    private val flushBuf = Runnable { val s = buf.trim(); buf = ""; if (s.isNotBlank()) onSpeech(s) }
+
     private val listener = object : RecognitionListener {
         override fun onPartialResult(h: String?) {
             if (!brain.isPlaying()) return
@@ -98,7 +101,11 @@ class HimanshuService : Service() {
         override fun onError(e: Exception?) { onHeard?.invoke("⚠ ${e?.message}") }
         override fun onResult(h: String?) {
             val txt = try { JSONObject(h ?: return).optString("text") } catch (e: Exception) { return }
-            if (txt.isNotBlank()) handler.post { onSpeech(txt) }
+            if (txt.isNotBlank()) handler.post {
+                buf = (buf + " " + txt).trim()
+                handler.removeCallbacks(flushBuf)
+                handler.postDelayed(flushBuf, 450)
+            }
         }
     }
 
@@ -123,19 +130,31 @@ class HimanshuService : Service() {
     }
 
     private var lastFail = 0L
+    private val QUESTION = listOf("क्यों", "कैसे", "क्या", "कौन", "कब", "कहाँ", "कहां", "समझाओ", "समझा", "मतलब", "अर्थ",
+        "बताओ", "बता", "why", "how", "what", "who", "explain", "tell").map { Hindi.norm(it) }.toSet()
+
+    /** छोटा सीधा आदेश हो तो फोन में ही तुरंत करो; लंबी या सवाल वाली बात AI को दो. */
+    private fun isSimple(cmd: String): Boolean {
+        if (cmd.contains(Hindi.norm("याद"))) return true
+        val tk = cmd.split(" ").filter { it.isNotBlank() }
+        return tk.size <= 10 && tk.none { it in QUESTION }
+    }
+
     private fun runCommand(c0: String, prefs: android.content.SharedPreferences) {
         var cmd = c0
         for (line in prefs.getStringSet("alias", emptySet())!!) {
             val k = line.substringBefore("=")
             if (k.isNotBlank() && cmd.contains(k)) cmd = cmd.replace(k, line.substringAfter("="))
         }
-        val handled = brain.handle(cmd)
         armedUntil = System.currentTimeMillis() + (if (brain.isPlaying()) 40000 else 180000)
         val n = System.currentTimeMillis()
-        if (handled) return
+        val priv = isPrivate(c0)
+        val simple = isSimple(cmd)
+        if ((simple || priv) && brain.handle(cmd)) return
+        if (priv) { say("यह मैं फोन में ही करता हूँ, बाहर नहीं भेजता। ठीक से बोलिए, जैसे: मम्मी को फोन लगाओ"); return }
         val key = prefs.getString("apikey", "") ?: ""
-        if (isPrivate(c0)) { say("यह निजी बात है, मैं इसे बाहर नहीं भेजता। फोन में ही कर सकता हूँ तो बोलिए: फोन लगाओ, गाना बजाओ वग़ैरह"); return }
         if (key.isBlank()) {
+            if (!simple && brain.handle(cmd)) return
             if (n - lastFail > 10000) { lastFail = n; say("समझ नहीं आया") }
             return
         }
@@ -147,11 +166,15 @@ class HimanshuService : Service() {
         val snapshot = ArrayList(hist)
         Thread {
             val t0 = System.currentTimeMillis()
-            val out = try { Ai.ask(key, c0, snapshot, prefs.getBoolean("pro", false)) } catch (e: Exception) { null }
+            val out = try { Ai.ask(key, c0, snapshot, false) } catch (e: Exception) { null }
             val ms = System.currentTimeMillis() - t0
             handler.post {
                 onHeard?.invoke("⏱ AI: " + (ms / 100) / 10.0 + " सेकंड")
-                if (out == null) { onHeard?.invoke("⚠ AI: " + Ai.lastError); say(aiFailMessage()); return@post }
+                if (out == null) {
+                    onHeard?.invoke("⚠ AI: " + Ai.lastError)
+                    if (!simple && brain.handle(cmd)) return@post
+                    say(aiFailMessage()); return@post
+                }
                 val reply = out.optString("reply")
                 hist.add(c0 to out.toString()); while (hist.size > 6) hist.removeAt(0)
                 val cmd2 = Ai.toCommand(out)

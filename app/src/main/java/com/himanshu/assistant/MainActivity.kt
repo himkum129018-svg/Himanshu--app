@@ -62,7 +62,7 @@ class MainActivity : Activity() {
                 .apply { topMargin = dp(10) })
         }
 
-        add(tv("Himanshu", 36f, gold))
+        add(tv("Himanshu v13", 36f, gold))
         add(tv("मेरा अपना हिंदी असिस्टेंट", 15f, Color.LTGRAY))
 
         add(tv("① AI की चाबी (Gemini)", 18f, gold))
@@ -70,6 +70,7 @@ class MainActivity : Activity() {
         add(btn("📋 चाबी कॉपी कर ली? तो यहाँ दबाइए") { pasteKey() })
         val keyBox = input("या चाबी यहाँ चिपकाइए", true); add(keyBox)
         add(btn("🔑 सेव करो") { saveKey(keyBox.text.toString()); keyBox.setText("") })
+        add(btn("🧪 चाबी जाँचो") { testKey() })
 
         add(tv("② शुरू करो", 18f, gold))
         add(btn("अनुमतियाँ दो") { requestPermissions(perms(), 1) })
@@ -87,11 +88,6 @@ class MainActivity : Activity() {
             setOnCheckedChangeListener { _, on -> prefs.edit().putBoolean("needName", on).apply() }
         })
 
-        add(Switch(this).apply {
-            text = "हमेशा Pro (ज़्यादा समझदार, पर धीमा)"; setTextColor(Color.WHITE)
-            isChecked = prefs.getBoolean("pro", false)
-            setOnCheckedChangeListener { _, on -> prefs.edit().putBoolean("pro", on).apply() }
-        })
 
         add(tv("③ टाइप करके आदेश दो", 18f, gold))
         val box = input("जैसे: दो और दो कितने होते हैं"); add(box)
@@ -119,6 +115,27 @@ class MainActivity : Activity() {
         prefs.edit().putString("apikey", key).apply()
         refreshKey()
         toast("चाबी सेव हो गई ✅")
+    }
+
+    private fun testKey() {
+        val key = prefs.getString("apikey", "") ?: ""
+        if (key.isBlank()) { toast("पहले चाबी सेव कीजिए"); return }
+        keyState.text = "जाँच रहा हूँ..."
+        keyState.setTextColor(Color.LTGRAY)
+        Thread {
+            val t0 = System.currentTimeMillis()
+            val r = try { Ai.ask(key, "दो और दो कितने होते हैं", emptyList()) } catch (e: Exception) { null }
+            val sec = (System.currentTimeMillis() - t0) / 100 / 10.0
+            runOnUiThread {
+                if (r != null) {
+                    keyState.text = "✅ चाबी सही है (" + sec + " सेकंड)। जवाब: " + r.optString("reply")
+                    keyState.setTextColor(Color.parseColor("#9FE870"))
+                } else {
+                    keyState.text = "❌ " + Ai.lastError
+                    keyState.setTextColor(Color.parseColor("#FF8A80"))
+                }
+            }
+        }.start()
     }
 
     private fun pasteKey() {

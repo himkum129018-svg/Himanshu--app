@@ -38,7 +38,7 @@ class Brain(private val c: Context, private val say: (String) -> Unit) {
     private fun has(t: String, vararg w: String) = w.any { t.contains(Hindi.norm(it)) }
 
     private val STEMS = listOf("बजा", "चला", "खोल", "लगा", "सुना", "मिला", "कीजि", "खोज", "सर्च", "ढूंढ",
-        "दिखा", "ओपन", "स्टार्ट", "शुरू", "डाउनलोड", "चालू").map { Hindi.norm(it) }
+        "दिखा", "ओपन", "स्टार्ट", "शुरू", "डाउनलोड", "download", "चालू").map { Hindi.norm(it) }
     private val WORDS = listOf("को", "से", "पर", "में", "का", "की", "के", "है", "हैं", "ही", "तो", "भी", "जरा",
         "प्लीज", "please", "करो", "कर", "दो", "दे", "करना", "करनी", "करें", "एक", "कोई", "मुझे", "मेरा", "मेरे",
         "मेरी", "वाला", "वाले", "वाली", "जी", "हे", "अरे", "ओ", "सुनो", "ऐप", "एप", "एप्प", "app", "open",
@@ -204,12 +204,16 @@ class Brain(private val c: Context, private val say: (String) -> Unit) {
 
     private fun play(t: String) {
         val q = clean(t, true)
-        val songs = loadSongs()
-        if (songs.isEmpty()) { say("फोन में गाने नहीं मिले, या अनुमति दीजिए"); return }
+        val all = loadSongs()
+        if (all.isEmpty()) { say("फोन में गाने नहीं मिले, या अनुमति दीजिए"); return }
+        val wantDl = has(t, "डाउनलोड", "download")
+        val dls = all.filter { it.dl }
+        val songs = if (wantDl && dls.isNotEmpty()) dls else all
         val pick = if (q.isNotBlank()) Hindi.best(q, songs) { it.title } else null
-        if (q.isNotBlank() && pick == null) say("वह गाना नहीं मिला, दूसरा बजाता हूँ") else say("ठीक है, गाना बजा रहा हूँ")
-        queue = if (pick != null) listOf(pick) + songs.filter { it !== pick }.shuffled()
-        else songs.filter { it.dl }.ifEmpty { songs }.shuffled()
+        if (wantDl && dls.isEmpty()) say("डाउनलोड फोल्डर में गाने नहीं मिले, फोन के बाकी गाने बजाता हूँ")
+        else if (q.isNotBlank() && pick == null) say("वह गाना नहीं मिला, दूसरा बजाता हूँ")
+        else say(if (wantDl) "डाउनलोड वाला गाना बजा रहा हूँ" else "ठीक है, गाना बजा रहा हूँ")
+        queue = if (pick != null) listOf(pick) + songs.filter { it !== pick }.shuffled() else songs.shuffled()
         idx = 0
         playIdx()
     }
@@ -229,13 +233,18 @@ class Brain(private val c: Context, private val say: (String) -> Unit) {
         } catch (e: Exception) { say("गाना नहीं बज पाया") }
     }
 
-    private fun next() { if (queue.isEmpty()) say("अभी कोई गाना नहीं चल रहा") else { idx++; playIdx() } }
+    private fun next() { if (queue.isEmpty()) play("") else { idx++; playIdx() } }
     private fun stopMusic() { try { player?.release() } catch (e: Exception) {}; player = null; queue = emptyList() }
 
     // ---------- ऐप और खोज ----------
     private fun youtubeSearch(t: String): Boolean {
         val q = clean(t, true)
-        if (q.isBlank()) return false
+        if (q.isBlank()) {
+            say("यूट्यूब खोल रहा हूँ")
+            val yi = c.packageManager.getLaunchIntentForPackage("com.google.android.youtube")
+            if (yi != null) go(yi) else go(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com")))
+            return true
+        }
         say("यूट्यूब पर खोज रहा हूँ")
         go(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=" + Uri.encode(q))))
         return true
