@@ -17,8 +17,8 @@ android {
         applicationId = "com.himanshu.assistant"
         minSdk = 26
         targetSdk = 34
-        versionCode = 15
-        versionName = "15.0"
+        versionCode = 16
+        versionName = "16.0"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
     compileOptions {

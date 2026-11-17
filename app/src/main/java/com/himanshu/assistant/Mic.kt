@@ -6,14 +6,18 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import org.vosk.Recognizer
 import org.vosk.android.RecognitionListener
-import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.sqrt
 
-/** अपना माइक-लूप: धीमी आवाज़ को अपने आप बढ़ाकर (auto gain) Vosk को देता है, ताकि धीरे बोलने पर भी सुनाई दे. */
+/**
+ * अपना माइक-लूप: धीमी आवाज़ को अपने आप बढ़ाकर (auto gain) Vosk को देता है, ताकि धीरे बोलने पर भी सुनाई दे.
+ * बोलते समय (pause) माइक की आवाज़ Vosk तक नहीं जाती, और फिर चालू होते ही Vosk साफ़ (reset) हो जाता है,
+ * ताकि हिमांशु अपनी ही आवाज़ को आदेश न समझ ले.
+ */
 class Mic(private val rec: Recognizer, private val listener: RecognitionListener) {
     @Volatile private var run = false
     @Volatile private var paused = false
+    @Volatile private var needReset = false
     private var th: Thread? = null
 
     fun start() {
@@ -21,11 +25,14 @@ class Mic(private val rec: Recognizer, private val listener: RecognitionListener
         th = Thread { loop() }.also { it.isDaemon = true; it.start() }
     }
 
-    fun setPause(p: Boolean) { paused = p }
+    fun setPause(p: Boolean) {
+        if (paused && !p) needReset = true
+        paused = p
+    }
 
     fun stop() {
         run = false
-        try { th?.join(1500) } catch (e: Exception) {}
+        try { th?.join(2000) } catch (e: Exception) {}
         th = null
     }
 
@@ -52,13 +59,19 @@ class Mic(private val rec: Recognizer, private val listener: RecognitionListener
             while (run) {
                 val n = ar.read(buf, 0, buf.size)
                 if (n < 0) { listener.onError(Exception("माइक पढ़ने में दिक्कत ($n)")); break }
+                if (needReset) {
+                    needReset = false
+                    try { rec.reset() } catch (e: Exception) {}
+                }
                 if (n == 0 || paused) continue
                 var sum = 0.0
                 for (i in 0 until n) sum += buf[i].toDouble() * buf[i]
                 val rms = sqrt(sum / n)
-                if (rms > 60) {                                   // सिर्फ़ तब गेन बदलो जब कुछ आवाज़ हो
-                    val want = (3000.0 / rms).toFloat().coerceIn(1f, 14f)
+                if (rms > 120) {                                  // आवाज़ जैसी चीज़ हो तभी गेन बदलो
+                    val want = (2800.0 / rms).toFloat().coerceIn(1f, 12f)
                     gain += (want - gain) * (if (want < gain) 0.6f else 0.25f)
+                } else {
+                    gain += (3f - gain) * 0.02f                   // शांत में गेन धीरे-धीरे घटाओ, ताकि शोर न बढ़े
                 }
                 for (i in 0 until n) {
                     val v = buf[i] * gain
@@ -68,7 +81,7 @@ class Mic(private val rec: Recognizer, private val listener: RecognitionListener
                 else listener.onPartialResult(rec.partialResult)
             }
         } catch (e: Exception) {
-            listener.onError(e)
+            if (run) listener.onError(e)
         } finally {
             try { ar.stop() } catch (e: Exception) {}
             ar.release()
