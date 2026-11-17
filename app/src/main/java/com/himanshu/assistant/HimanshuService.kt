@@ -35,7 +35,7 @@ class HimanshuService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
     private var model: Model? = null
-    private var speech: SpeechService? = null
+    private var speech: Mic? = null
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private var pending = 0
@@ -88,8 +88,8 @@ class HimanshuService : Service() {
         try {
             try { speech?.stop(); speech?.shutdown() } catch (e: Exception) {}
             val rec = Recognizer(model!!, 16000.0f)
-            speech = SpeechService(rec, 16000.0f)
-            speech?.startListening(listener)
+            speech = Mic(rec, listener)
+            speech?.start()
             micTries = 0
             emit("🎧 सुन रहा हूँ")
             if (!greeted) { greeted = true; say("हिमांशु तैयार है") }

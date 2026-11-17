@@ -62,7 +62,7 @@ class MainActivity : Activity() {
                 .apply { topMargin = dp(10) })
         }
 
-        add(tv("Himanshu v14", 36f, gold))
+        add(tv("Himanshu v15", 36f, gold))
         add(tv("मेरा अपना हिंदी असिस्टेंट", 15f, Color.LTGRAY))
 
         add(tv("① AI की चाबी (Gemini)", 18f, gold))

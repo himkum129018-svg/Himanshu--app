@@ -73,6 +73,7 @@ class Brain(private val c: Context, private val say: (String) -> Unit) {
             has(t, "किसने बनाया", "किसने तुम्हें", "तुम्हें किसने", "तुम्हे किसने", "आपको किसने", "बनाया किसने", "बनाने वाला", "कौन बनाया", "who made", "who created") -> { say("मुझे हिमांशु ने बनाया है, अपने निजी इस्तेमाल के लिए"); true }
             has(t, "नाम क्या", "कौन हो", "तुम्हारा नाम", "आपका नाम") -> { say("मैं हिमांशु हूँ, हिमांशु का निजी असिस्टेंट"); true }
             has(t, "कैसे हो", "कैसी हो", "कैसे हैं") -> { say("मैं बढ़िया हूँ, आप बताइए"); true }
+            openKnown(t) -> true
             isCall(t) -> call(t, tokens)
             has(t, "रोको", "रुको", "बंद करो", "बंद कर", "चुप", "स्टॉप", "stop", "पॉज") -> { stopMusic(); true }
             has(t, "अगला", "नेक्स्ट", "next", "दूसरा गाना", "बदलो") -> { next(); true }
@@ -237,6 +238,40 @@ class Brain(private val c: Context, private val say: (String) -> Unit) {
     private fun stopMusic() { try { player?.release() } catch (e: Exception) {}; player = null; queue = emptyList() }
 
     // ---------- ऐप और खोज ----------
+    private class AppDef(val label: String, val words: List<String>, val pkg: String, val web: String?)
+    private val KNOWN = listOf(
+        AppDef("यूट्यूब", listOf("यूट्यूब", "यू ट्यूब", "यूटयूब", "यूटूब", "यूतूब", "यूट्यूप", "ऊट्यूब", "ट्यूब", "youtube", "you tube"), "com.google.android.youtube", "https://www.youtube.com"),
+        AppDef("गूगल", listOf("गूगल", "गुगल", "google"), "com.google.android.googlequicksearchbox", "https://www.google.com"),
+        AppDef("इंस्टाग्राम", listOf("इंस्टाग्राम", "इंस्टा", "instagram", "insta"), "com.instagram.android", "https://www.instagram.com"),
+        AppDef("फेसबुक", listOf("फेसबुक", "फेस बुक", "facebook"), "com.facebook.katana", "https://www.facebook.com"),
+        AppDef("व्हाट्सएप", listOf("व्हाट्सएप", "व्हाट्सऐप", "वाट्सएप", "वाट्सऐप", "व्हाट्स ऐप", "whatsapp"), "com.whatsapp", null),
+        AppDef("क्रोम", listOf("क्रोम", "chrome"), "com.android.chrome", "https://www.google.com"),
+        AppDef("स्नैपचैट", listOf("स्नैपचैट", "snapchat"), "com.snapchat.android", null),
+        AppDef("टेलीग्राम", listOf("टेलीग्राम", "telegram"), "org.telegram.messenger", null)
+    )
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /** "यूट्यूब", "यूट्यूब खोलो", "यूट्यूब गूगल इंस्टाग्राम खोलो": जितने ऐप के नाम बोले, बस वही (और सिर्फ़ वही) खुलते हैं. */
+    private fun openKnown(t: String): Boolean {
+        // खोजना/गाना बजाना हो तो ये सीधा ऐप खोलना नहीं है, आगे के नियम देखेंगे
+        if (has(t, "खोज", "सर्च", "search", "ढूंढ", "बजा", "गाना", "गाने", "गीत", "song", "play", "प्ले", "music", "म्यूजिक", "संगीत")) return false
+        val hits = KNOWN.mapNotNull { a ->
+            val idx = a.words.map { t.indexOf(Hindi.norm(it)) }.filter { it >= 0 }.minOrNull()
+            if (idx == null) null else idx to a
+        }.sortedBy { it.first }.map { it.second }
+        if (hits.isEmpty()) return false
+        say(hits.joinToString(", ") { it.label } + " खोल रहा हूँ")
+        hits.forEachIndexed { i, a -> mainHandler.postDelayed({ launchApp(a) }, i * 800L) }
+        return true
+    }
+
+    private fun launchApp(a: AppDef) {
+        val li = c.packageManager.getLaunchIntentForPackage(a.pkg)
+        if (li != null) { go(li); return }
+        if (a.web != null) { go(Intent(Intent.ACTION_VIEW, Uri.parse(a.web))); return }
+        say(a.label + " फोन में नहीं मिला")
+    }
+
     private fun youtubeSearch(t: String): Boolean {
         val q = clean(t, true)
         if (q.isBlank()) {
