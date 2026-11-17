@@ -25,6 +25,9 @@ import java.util.Locale
 class HimanshuService : Service() {
     companion object {
         var onHeard: ((String) -> Unit)? = null
+        private val log = ArrayDeque<String>()
+        fun emit(s: String) { synchronized(log) { log.addFirst(s); while (log.size > 12) log.removeLast() }; onHeard?.invoke(s) }
+        fun snapshot(): List<String> = synchronized(log) { log.toList() }
         const val ARM = "arm"
         const val CMD = "cmd"
         const val RESUME = "resume"
@@ -59,32 +62,41 @@ class HimanshuService : Service() {
         tts = TextToSpeech(this) { s ->
             if (s == TextToSpeech.SUCCESS) {
                 val r = tts?.setLanguage(Locale("hi", "IN"))
+                if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) tts?.setLanguage(Locale.getDefault())
                 tts?.setSpeechRate(1.12f)
                 ttsReady = true
                 if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED)
-                    onHeard?.invoke("⚠ फोन में हिंदी आवाज़ नहीं है। Settings > Text-to-speech > Google > Install voice data > हिंदी")
-            } else onHeard?.invoke("⚠ बोलने वाला (Text-to-speech) चालू नहीं हो पाया")
+                    emit("⚠ फोन में हिंदी आवाज़ नहीं है। Settings > Text-to-speech > Google > Install voice data > हिंदी")
+            } else emit("⚠ बोलने वाला (Text-to-speech) चालू नहीं हो पाया")
         }
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(id: String?) {}
             override fun onDone(id: String?) { done() }
-            @Deprecated("old") override fun onError(id: String?) { done() }
+            @Deprecated("old") override fun onError(id: String?) { emit("⚠ आवाज़ बोल नहीं पाई"); done() }
         })
 
-        onHeard?.invoke("आवाज़ वाला मॉडल तैयार हो रहा है (पहली बार 1-2 मिनट लगते हैं)...")
+        emit("आवाज़ वाला मॉडल तैयार हो रहा है (पहली बार 1-2 मिनट लगते हैं)...")
         StorageService.unpack(this, "model", "model",
             { m -> model = m; startListening() },
-            { e -> onHeard?.invoke("⚠ मॉडल नहीं खुला: ${e.message}") })
+            { e -> emit("⚠ मॉडल नहीं खुला: ${e.message}") })
     }
+
+    private var greeted = false
+    private var micTries = 0
 
     private fun startListening() {
         try {
+            try { speech?.stop(); speech?.shutdown() } catch (e: Exception) {}
             val rec = Recognizer(model!!, 16000.0f)
             speech = SpeechService(rec, 16000.0f)
             speech?.startListening(listener)
-            onHeard?.invoke("🎧 सुन रहा हूँ")
-            say("हिमांशु तैयार है")
-        } catch (e: Exception) { onHeard?.invoke("⚠ माइक नहीं चला: ${e.message}") }
+            micTries = 0
+            emit("🎧 सुन रहा हूँ")
+            if (!greeted) { greeted = true; say("हिमांशु तैयार है") }
+        } catch (e: Exception) {
+            emit("⚠ माइक नहीं चला: ${e.message}")
+            if (++micTries <= 10) handler.postDelayed({ startListening() }, 3000)
+        }
     }
 
     private var buf = ""
@@ -94,11 +106,11 @@ class HimanshuService : Service() {
         override fun onPartialResult(h: String?) {
             if (!brain.isPlaying()) return
             val p = try { JSONObject(h ?: return).optString("partial") } catch (e: Exception) { return }
-            if (p.isNotBlank() && brain.isStop(Hindi.norm(p))) handler.post { if (brain.isPlaying()) { brain.stopNow(); onHeard?.invoke("⏹ गाना रोक दिया") } }
+            if (p.isNotBlank() && brain.isStop(Hindi.norm(p))) handler.post { if (brain.isPlaying()) { brain.stopNow(); emit("⏹ गाना रोक दिया") } }
         }
         override fun onFinalResult(h: String?) {}
         override fun onTimeout() {}
-        override fun onError(e: Exception?) { onHeard?.invoke("⚠ ${e?.message}") }
+        override fun onError(e: Exception?) { emit("⚠ माइक रुका (${e?.message}), फिर चालू कर रहा हूँ"); handler.postDelayed({ startListening() }, 1500) }
         override fun onResult(h: String?) {
             val txt = try { JSONObject(h ?: return).optString("text") } catch (e: Exception) { return }
             if (txt.isNotBlank()) handler.post {
@@ -113,11 +125,11 @@ class HimanshuService : Service() {
         val t = Hindi.norm(raw)
         if (t.isBlank()) return
         val prefs = getSharedPreferences("him", MODE_PRIVATE)
-        val needName = prefs.getBoolean("needName", true) || brain.isPlaying()
+        val needName = prefs.getBoolean("needName", false) || brain.isPlaying()
         val tokens = t.split(" ")
         val hasName = tokens.any { Hindi.isWake(it) }
         val armed = System.currentTimeMillis() < armedUntil
-        onHeard?.invoke("👂 $t")
+        emit("👂 $t")
         if (brain.isPlaying() && brain.isStop(t)) { brain.stopNow(); return }
         if (needName && !hasName && !armed) return
         var cmd = tokens.filter { !Hindi.isWake(it) }.joinToString(" ")
@@ -169,11 +181,11 @@ class HimanshuService : Service() {
             val out = try { Ai.ask(key, c0, snapshot, false) } catch (e: Exception) { null }
             val ms = System.currentTimeMillis() - t0
             handler.post {
-                onHeard?.invoke("⏱ AI: " + (ms / 100) / 10.0 + " सेकंड")
+                emit("⏱ AI: " + (ms / 100) / 10.0 + " सेकंड")
                 if (out == null) {
-                    onHeard?.invoke("⚠ AI: " + Ai.lastError)
+                    emit("⚠ AI: " + Ai.lastError)
                     if (!simple && brain.handle(cmd)) return@post
-                    say(aiFailMessage()); return@post
+                    sayAiFail(); return@post
                 }
                 val reply = out.optString("reply")
                 hist.add(c0 to out.toString()); while (hist.size > 6) hist.removeAt(0)
@@ -188,29 +200,41 @@ class HimanshuService : Service() {
         "ओटीपी", "otp", "बैंक", "bank", "पिन", "व्हाट्सएप", "whatsapp", "मैसेज", "message", "खाता", "कार्ड").map { Hindi.norm(it) }
     private fun isPrivate(t: String): Boolean { val n = Hindi.norm(t); return PRIVATE.any { n.contains(it) } }
 
+    private var lastAiMsg = ""
+    private var lastAiMsgAt = 0L
+
     private fun aiFailMessage(): String {
         val e = Ai.lastError
         return when {
-            e.contains("429") -> "अभी AI थोड़ा व्यस्त है, एक पल रुककर फिर बोलिए"
-            e.contains("400") || e.contains("401") || e.contains("403") -> "चाबी सही नहीं लग रही, ऐप में दोबारा डाल दीजिए"
+            e.contains("HTTP 401") || e.contains("API key not valid") || e.contains("API_KEY_INVALID") -> "चाबी सही नहीं है"
+            e.contains("HTTP 403") -> "इस चाबी को अभी इजाज़त नहीं मिली"
+            e.contains("429") -> "अभी AI थोड़ा व्यस्त है"
+            e.contains("HTTP 404") || e.contains("HTTP 400") || e.contains("empty") -> "AI से जवाब नहीं आया, फिर बोलिए"
             else -> "इंटरनेट नहीं चल रहा लगता है"
         }
+    }
+
+    /** वही एरर 30 सेकंड में दोबारा नहीं बोलता. */
+    private fun sayAiFail() {
+        val m = aiFailMessage(); val now = System.currentTimeMillis()
+        if (m == lastAiMsg && now - lastAiMsgAt < 30000) return
+        lastAiMsg = m; lastAiMsgAt = now; say(m)
     }
 
     private var sayGen = 0
 
     fun say(text: String) {
         handler.post {
-            onHeard?.invoke("🔊 $text")
+            emit("🔊 $text")
             if (!ttsReady) return@post
             speech?.setPause(true)
             pending++
             val gen = ++sayGen
             val r = tts?.speak(text, TextToSpeech.QUEUE_ADD, null, "u" + System.nanoTime())
-            if (r != TextToSpeech.SUCCESS) pending--
+            if (r != TextToSpeech.SUCCESS) { pending--; emit("⚠ बोलने में दिक्कत आई") }
             // भरोसेमंद वापसी: आवाज़ ख़त्म हो न हो, माइक थोड़ी देर बाद फिर चालू हो जाएगा
             handler.postDelayed({
-                if (gen == sayGen) { pending = 0; speech?.setPause(false); onHeard?.invoke("🎧 सुन रहा हूँ") }
+                if (gen == sayGen) { pending = 0; speech?.setPause(false); emit("🎧 सुन रहा हूँ") }
             }, 900L + text.length * 110L)
         }
     }
@@ -223,7 +247,7 @@ class HimanshuService : Service() {
 
     override fun onStartCommand(i: Intent?, f: Int, id: Int): Int {
         if (i?.action == RESUME) {
-            pending = 0; speech?.setPause(false); onHeard?.invoke("🎧 माइक चालू कर दिया")
+            pending = 0; speech?.setPause(false); emit("🎧 माइक चालू कर दिया")
         }
         if (i?.action == CMD) {
             val txt = i?.getStringExtra("text") ?: ""

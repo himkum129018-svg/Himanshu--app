@@ -17,7 +17,7 @@ action इनमें से एक: torch_on, torch_off, play_music (फोन
 reply = बोलने के लिए छोटा हिंदी वाक्य। साधारण सवाल या बातचीत हो तो action none रखो और जवाब reply में दो।"""
 
     @Volatile var lastError = ""
-    private val FAST = listOf("gemini-flash-latest", "gemini-flash-lite-latest")
+    private val FAST = listOf("gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-flash-lite-latest")
     private val SMART = listOf("gemini-pro-latest", "gemini-flash-latest", "gemini-flash-lite-latest")
     private val HARD = listOf("समझाओ", "समझा", "क्यों", "कैसे", "फर्क", "अंतर", "कारण", "विस्तार", "सलाह",
         "explain", "why", "how", "difference").map { Hindi.norm(it) }
@@ -36,17 +36,20 @@ reply = बोलने के लिए छोटा हिंदी वाक�
         return out.joinToString(" ")
     }
 
-    fun ask(key: String, text0: String, history0: List<Pair<String, String>>, alwaysPro: Boolean = false): JSONObject? {
+    fun ask(key0: String, text0: String, history0: List<Pair<String, String>>, alwaysPro: Boolean = false): JSONObject? {
+        lastError = ""
+        val key = key0.filter { !it.isWhitespace() }
         val text = scrub(text0)
         val history = history0.map { scrub(it.first) to it.second }
-        val deep = alwaysPro || isHard(text)
+        var authBad = false
         for (m in FAST) {
-            val r = try { call(key, m, text, history, !deep) } catch (e: Exception) { lastError = m + ": " + (e.message ?: "error"); null }
-            if (r != null) return r
-            if (lastError.contains("HTTP 400")) {
-                val r2 = try { call(key, m, text, history, false) } catch (e: Exception) { null }
-                if (r2 != null) return r2
+            for (noThink in listOf(true, false)) {
+                val r = try { call(key, m, text, history, noThink) } catch (e: Exception) { lastError = m + ": " + (e.message ?: "net error"); null }
+                if (r != null) return r
+                if (lastError.contains("HTTP 401") || lastError.contains("API key not valid") || lastError.contains("API_KEY_INVALID")) { authBad = true; break }
+                if (!lastError.contains("HTTP 400") && !lastError.contains("empty")) break
             }
+            if (authBad) break
         }
         return null
     }
@@ -82,7 +85,7 @@ reply = बोलने के लिए छोटा हिंदी वाक�
             .getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text")
         val s = t.indexOf('{')
         val e = t.lastIndexOf('}')
-        if (s < 0 || e < s) return null
+        if (s < 0 || e < s) { lastError = model + ": empty answer"; return null }
         return JSONObject(t.substring(s, e + 1))
     }
 

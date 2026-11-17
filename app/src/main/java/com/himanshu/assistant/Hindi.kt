@@ -98,5 +98,5 @@ object Hindi {
     }
 
     fun isWake(tok: String) = tok.startsWith("हिम") || tok.contains("मांशु") || tok.contains("माशु") ||
-        tok.contains("मांसु") || tok.contains("himan")
+        tok.contains("मांसु") || tok.contains("himan") || tok.startsWith("हीम") || tok.contains("हिमां")
 }

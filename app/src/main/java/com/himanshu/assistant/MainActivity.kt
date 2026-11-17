@@ -62,7 +62,7 @@ class MainActivity : Activity() {
                 .apply { topMargin = dp(10) })
         }
 
-        add(tv("Himanshu v13", 36f, gold))
+        add(tv("Himanshu v14", 36f, gold))
         add(tv("मेरा अपना हिंदी असिस्टेंट", 15f, Color.LTGRAY))
 
         add(tv("① AI की चाबी (Gemini)", 18f, gold))
@@ -84,7 +84,7 @@ class MainActivity : Activity() {
         })
         add(Switch(this).apply {
             text = "पहले 'हिमांशु' बोलना ज़रूरी"; setTextColor(Color.WHITE)
-            isChecked = prefs.getBoolean("needName", true)
+            isChecked = prefs.getBoolean("needName", false)
             setOnCheckedChangeListener { _, on -> prefs.edit().putBoolean("needName", on).apply() }
         })
 
@@ -178,6 +178,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         refreshKey()
+        lines.clear(); lines.addAll(HimanshuService.snapshot().take(6)); status.text = lines.joinToString("\n")
         HimanshuService.onHeard = { s ->
             runOnUiThread {
                 lines.addFirst(s); while (lines.size > 6) lines.removeLast()
